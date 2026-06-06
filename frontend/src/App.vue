@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { generateScriptApi } from './api/script'
+import { createSafeFilename, downloadTextFile } from './utils/download'
 import type { ScriptStyle } from './types/script'
 
 const title = ref('')
@@ -85,6 +86,19 @@ async function generateScript() {
     loading.value = false
   }
 }
+
+function exportYaml() {
+  if (!yamlResult.value.trim()) {
+    ElMessage.warning('暂无可导出的 YAML 内容')
+    return
+  }
+
+  const filename = createSafeFilename(title.value || 'novel-script', 'yaml')
+
+  downloadTextFile(filename, yamlResult.value)
+
+  ElMessage.success('YAML 文件已导出')
+}
 </script>
 
 <template>
@@ -159,7 +173,15 @@ async function generateScript() {
             <h2>YAML 剧本结果</h2>
             <p>结构化剧本初稿，可用于后续编辑和导出。</p>
           </div>
-          <span>Preview</span>
+
+          <el-button
+            size="small"
+            type="success"
+            :disabled="!yamlResult.trim()"
+            @click="exportYaml"
+          >
+            导出 YAML
+          </el-button>
         </div>
 
         <el-alert
