@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-
-type ScriptStyle = 'film' | 'short_drama' | 'stage'
+import { generateScriptApi } from './api/script'
+import type { ScriptStyle } from './types/script'
 
 const title = ref('')
 const sourceText = ref('')
@@ -51,7 +51,7 @@ function clearText() {
   warnings.value = []
 }
 
-function generateMockYaml() {
+async function generateScript() {
   if (!canGenerate.value) {
     ElMessage.warning('请至少输入 100 个字的小说内容')
     return
@@ -60,62 +60,30 @@ function generateMockYaml() {
   loading.value = true
   summary.value = ''
   warnings.value = []
+  yamlResult.value = ''
 
-  window.setTimeout(() => {
-    yamlResult.value = `title: "${title.value || '未命名剧本'}"
-version: "1.0"
-source:
-  type: "novel"
-  chapter_count: 3
-  adaptation_style: "${style.value}"
-characters:
-  - id: "c001"
-    name: "林舟"
-    role: "protagonist"
-    description: "故事主角，性格冷静，但内心有强烈的目标感。"
-    personality:
-      - "冷静"
-      - "执着"
-      - "谨慎"
-scenes:
-  - id: "s001"
-    chapter: 1
-    title: "雨夜醒来"
-    location: "旧城区街道"
-    time: "night"
-    summary: "林舟在雨夜醒来，发现自己身处陌生城市，故事冲突开始出现。"
-    characters:
-      - "林舟"
-    dialogues:
-      - speaker: "林舟"
-        text: "这里到底发生了什么？"
-        emotion: "confused"
-    actions:
-      - "林舟扶着墙站起，雨水顺着他的额头滑落。"
-  - id: "s002"
-    chapter: 2
-    title: "神秘来客"
-    location: "废弃车站"
-    time: "midnight"
-    summary: "林舟遇到神秘女子，对方提示他城市异变的真相。"
-    characters:
-      - "林舟"
-      - "神秘女子"
-    dialogues:
-      - speaker: "神秘女子"
-        text: "如果你想活下去，就不要相信这里的时间。"
-        emotion: "serious"
-    actions:
-      - "远处钟声响起，车站灯光忽明忽暗。"
-warnings:
-  - "当前为前端 Mock 数据，后续将接入后端 AI 接口。"
-`
+  try {
+    const result = await generateScriptApi({
+      title: title.value.trim(),
+      sourceText: sourceText.value.trim(),
+      style: style.value
+    })
 
-    summary.value = '已生成 YAML 剧本初稿。当前为 Mock 演示数据。'
-    warnings.value = ['当前结果为 Mock 数据，后续 PR 会接入真实 AI 生成接口。']
+    yamlResult.value = result.yaml
+    summary.value = result.summary
+    warnings.value = result.warnings
+
+    if (result.fallback) {
+      ElMessage.warning('当前返回备用 YAML，请检查后端 AI 配置')
+    } else {
+      ElMessage.success('AI 剧本生成成功')
+    }
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('生成失败，请确认后端服务是否启动')
+  } finally {
     loading.value = false
-    ElMessage.success('Mock YAML 生成成功')
-  }, 600)
+  }
 }
 </script>
 
@@ -177,7 +145,7 @@ warnings:
               type="primary"
               :loading="loading"
               :disabled="!canGenerate"
-              @click="generateMockYaml"
+              @click="generateScript"
             >
               生成剧本 YAML
             </el-button>
