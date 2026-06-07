@@ -99,3 +99,11 @@ npm run dev
 cd frontend
 npm install
 npm run dev
+
+```markdown
+## Demo 视频
+
+视频文件：QQ录屏20260607233347.mp4
+
+链接：https://pan.baidu.com/s/1WsqD5GFBs1hLecDOcHw2ng?pwd=6bxa
+提取码：6bxa
