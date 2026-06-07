@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { generateScriptApi } from './api/script'
 import logoIcon from './assets/02-transparent.png'
 import { demoNovel, demoYamlPreview } from './utils/demoText'
+import { clearDraft, getDraftSavedAt, loadDraft, saveDraft } from './utils/draftStorage'
 import { createSafeFilename, downloadTextFile } from './utils/download'
+import { checkYamlSchema } from './utils/schemaCheck'
 import { formatYamlText } from './utils/yamlTools'
 import type { ScriptStyle } from './types/script'
 
@@ -17,11 +19,19 @@ const summary = ref('')
 const warnings = ref<string[]>([])
 const loading = ref(false)
 const generationDuration = ref<number | null>(null)
+const isFallbackResult = ref(false)
 const demoPreviewVisible = ref(false)
+const draftSavedAt = ref<string | null>(null)
 
 const wordCount = computed(() => sourceText.value.trim().length)
 const demoNovelParagraphs = computed(() => demoNovel.sourceText.split('\n\n').slice(0, 3))
 const hasYamlResult = computed(() => yamlResult.value.trim().length > 0)
+const schemaCheckResult = computed(() => checkYamlSchema(yamlResult.value))
+const draftSavedAtText = computed(() => {
+  if (!draftSavedAt.value) return '尚未保存草稿'
+
+  return `上次保存：${formatSavedAt(draftSavedAt.value)}`
+})
 const generationStatusText = computed(() => {
   if (loading.value) return '生成中'
   if (generationDuration.value !== null) {
@@ -42,6 +52,7 @@ function resetWorkspace() {
   summary.value = ''
   warnings.value = []
   generationDuration.value = null
+  isFallbackResult.value = false
 }
 
 function goWorkspace() {
@@ -65,6 +76,7 @@ function fillExampleAndOpen() {
   summary.value = ''
   warnings.value = []
   generationDuration.value = null
+  isFallbackResult.value = false
   currentView.value = 'workspace'
 }
 
@@ -113,6 +125,7 @@ async function generateScript() {
   summary.value = ''
   warnings.value = []
   yamlResult.value = ''
+  isFallbackResult.value = false
   const startTime = performance.now()
 
   try {
@@ -125,6 +138,7 @@ async function generateScript() {
     yamlResult.value = result.yaml
     summary.value = result.summary
     warnings.value = result.warnings
+    isFallbackResult.value = result.fallback
 
     if (result.fallback) {
       ElMessage.warning('当前返回备用 YAML，请检查后端 AI 配置')
@@ -159,6 +173,66 @@ function formatYaml() {
   ElMessage.success('YAML 已格式化')
 }
 
+function formatSavedAt(savedAt: string) {
+  const date = new Date(savedAt)
+
+  if (Number.isNaN(date.getTime())) return savedAt
+
+  const pad = (value: number) => String(value).padStart(2, '0')
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}`
+}
+
+function handleSaveDraft() {
+  if (!title.value.trim() && !sourceText.value.trim() && !yamlResult.value.trim()) {
+    ElMessage.warning('暂无可保存内容')
+    return
+  }
+
+  const draft = saveDraft({
+    title: title.value,
+    style: style.value,
+    sourceText: sourceText.value,
+    yamlResult: yamlResult.value,
+    summary: summary.value,
+    warnings: warnings.value,
+    isFallbackResult: isFallbackResult.value,
+    generationDuration: generationDuration.value
+  })
+
+  draftSavedAt.value = draft.savedAt
+  ElMessage.success('草稿已保存')
+}
+
+function handleRestoreDraft() {
+  const draft = loadDraft()
+
+  if (!draft) {
+    ElMessage.warning('暂无本地草稿')
+    return
+  }
+
+  title.value = draft.title
+  style.value = draft.style
+  sourceText.value = draft.sourceText
+  yamlResult.value = draft.yamlResult
+  summary.value = draft.summary
+  warnings.value = draft.warnings
+  isFallbackResult.value = draft.isFallbackResult
+  generationDuration.value = draft.generationDuration
+  draftSavedAt.value = draft.savedAt
+
+  ElMessage.success('草稿已恢复')
+}
+
+function handleClearDraft() {
+  clearDraft()
+  draftSavedAt.value = null
+  ElMessage.success('草稿已清除')
+}
+
 function exportYaml() {
   if (!hasYamlResult.value) {
     ElMessage.warning('暂无可导出的 YAML 内容')
@@ -171,6 +245,10 @@ function exportYaml() {
 
   ElMessage.success('YAML 文件已导出')
 }
+
+onMounted(() => {
+  draftSavedAt.value = getDraftSavedAt()
+})
 </script>
 
 <template>
@@ -263,6 +341,25 @@ function exportYaml() {
             <div>
               <h2 id="input-title">小说输入</h2>
               <p>上传或粘贴小说正文，补充标题和目标剧本风格。</p>
+            </div>
+          </div>
+
+          <div class="draft-panel" aria-label="本地草稿">
+            <div>
+              <h3>本地草稿</h3>
+              <p>{{ draftSavedAtText }}</p>
+            </div>
+
+            <div class="draft-actions">
+              <el-button @click="handleSaveDraft">
+                保存草稿
+              </el-button>
+              <el-button @click="handleRestoreDraft">
+                恢复草稿
+              </el-button>
+              <el-button @click="handleClearDraft">
+                清除草稿
+              </el-button>
             </div>
           </div>
 
@@ -391,6 +488,36 @@ function exportYaml() {
               :rows="24"
               placeholder="生成后的 YAML 剧本会显示在这里..."
             />
+          </div>
+
+          <div class="schema-card" aria-label="Schema 完整度检查">
+            <div class="schema-header">
+              <div>
+                <h3>Schema 检查</h3>
+                <p v-if="!hasYamlResult">生成剧本后可查看 Schema 完整度</p>
+                <p v-else>
+                  已通过 {{ schemaCheckResult.passedCount }} / {{ schemaCheckResult.totalCount }} 项
+                </p>
+              </div>
+
+              <span
+                class="schema-score"
+                :class="{ 'schema-score-empty': !hasYamlResult }"
+              >
+                {{ hasYamlResult ? `${schemaCheckResult.score}%` : '--' }}
+              </span>
+            </div>
+
+            <div v-if="hasYamlResult" class="schema-items">
+              <span
+                v-for="item in schemaCheckResult.items"
+                :key="item.keyword"
+                class="schema-item"
+                :class="item.passed ? 'schema-item-pass' : 'schema-item-missing'"
+              >
+                {{ item.label }}
+              </span>
+            </div>
           </div>
         </section>
       </main>
