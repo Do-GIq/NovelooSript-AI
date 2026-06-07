@@ -464,6 +464,52 @@ a {
   line-height: 1.55;
 }
 
+.draft-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: -6px 0 20px;
+  padding: 14px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.draft-panel h3,
+.schema-card h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.draft-panel p,
+.schema-card p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.draft-actions .el-button + .el-button {
+  margin-left: 0;
+}
+
+.draft-actions .el-button {
+  min-height: 38px;
+  min-width: 92px;
+  padding-inline: 12px;
+}
+
 .script-form {
   padding-top: 2px;
 }
@@ -663,6 +709,71 @@ a {
     "Microsoft YaHei",
     system-ui,
     sans-serif;
+}
+
+.schema-card {
+  margin-top: 14px;
+  padding: 16px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.schema-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.schema-score {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  min-height: 30px;
+  padding: 0 10px;
+  color: #0f6b50;
+  font-size: 13px;
+  font-weight: 700;
+  background: #e7f5ef;
+  border: 1px solid #b7dfcf;
+  border-radius: 999px;
+}
+
+.schema-score-empty {
+  color: var(--soft);
+  background: #ffffff;
+  border-color: var(--line);
+}
+
+.schema-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.schema-item {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 9px;
+  font-size: 13px;
+  font-weight: 650;
+  border-radius: 999px;
+}
+
+.schema-item-pass {
+  color: #0f6b50;
+  background: #e7f5ef;
+  border: 1px solid #b7dfcf;
+}
+
+.schema-item-missing {
+  color: #7a5a00;
+  background: #fff4d8;
+  border: 1px solid #ead48e;
 }
 
 .el-input__wrapper,
@@ -926,6 +1037,20 @@ a {
   .panel {
     padding: 18px 14px;
     border-radius: 10px;
+  }
+
+  .draft-panel {
+    align-items: stretch;
+    flex-direction: column;
+    margin-top: -4px;
+  }
+
+  .draft-actions {
+    justify-content: stretch;
+  }
+
+  .draft-actions .el-button {
+    width: 100%;
   }
 
   .panel-title,
