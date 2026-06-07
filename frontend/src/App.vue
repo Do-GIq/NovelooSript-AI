@@ -3,7 +3,9 @@ import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { generateScriptApi } from './api/script'
 import logoIcon from './assets/02-transparent.png'
+import { demoNovel, demoYamlPreview } from './utils/demoText'
 import { createSafeFilename, downloadTextFile } from './utils/download'
+import { formatYamlText } from './utils/yamlTools'
 import type { ScriptStyle } from './types/script'
 
 const currentView = ref<'home' | 'workspace'>('home')
@@ -14,8 +16,20 @@ const yamlResult = ref('')
 const summary = ref('')
 const warnings = ref<string[]>([])
 const loading = ref(false)
+const generationDuration = ref<number | null>(null)
+const demoPreviewVisible = ref(false)
 
 const wordCount = computed(() => sourceText.value.trim().length)
+const demoNovelParagraphs = computed(() => demoNovel.sourceText.split('\n\n').slice(0, 3))
+const hasYamlResult = computed(() => yamlResult.value.trim().length > 0)
+const generationStatusText = computed(() => {
+  if (loading.value) return '生成中'
+  if (generationDuration.value !== null) {
+    return `生成耗时：${generationDuration.value.toFixed(1)}s`
+  }
+
+  return '等待生成'
+})
 
 const canGenerate = computed(() => {
   return sourceText.value.trim().length >= 100
@@ -27,6 +41,7 @@ function resetWorkspace() {
   yamlResult.value = ''
   summary.value = ''
   warnings.value = []
+  generationDuration.value = null
 }
 
 function goWorkspace() {
@@ -38,14 +53,24 @@ function goHome() {
   currentView.value = 'home'
 }
 
+function openDemoPreview() {
+  demoPreviewVisible.value = true
+}
+
 function fillExampleAndOpen() {
-  title.value = '雾港来信'
-  sourceText.value =
-    '第一章 雾港的清晨，邮差林澈在旧码头发现了一封没有署名的信。信纸被海风吹得发皱，上面只写着一句话：今晚十二点，请到灯塔来。\n\n第二章 林澈带着信来到灯塔，发现失踪多年的剧团演员苏晚正在那里等他。她说这座城市即将被一桩旧案重新唤醒，而他们必须在天亮前找到当年的证词。\n\n第三章 两人穿过废弃剧院，在后台找到一只铁盒。盒子里有半截录音带和一张泛黄的剧照，照片背面写着：真正的主角，从来没有登台。'
+  title.value = demoNovel.title
+  style.value = demoNovel.style
+  sourceText.value = demoNovel.sourceText
   yamlResult.value = ''
   summary.value = ''
   warnings.value = []
+  generationDuration.value = null
   currentView.value = 'workspace'
+}
+
+function useDemoFromPreview() {
+  demoPreviewVisible.value = false
+  fillExampleAndOpen()
 }
 
 function handleFileChange(event: Event) {
@@ -84,9 +109,11 @@ async function generateScript() {
   }
 
   loading.value = true
+  generationDuration.value = null
   summary.value = ''
   warnings.value = []
   yamlResult.value = ''
+  const startTime = performance.now()
 
   try {
     const result = await generateScriptApi({
@@ -108,12 +135,32 @@ async function generateScript() {
     console.error(error)
     ElMessage.error('生成失败，请确认后端服务是否启动')
   } finally {
+    generationDuration.value = (performance.now() - startTime) / 1000
     loading.value = false
   }
 }
 
+async function copyYaml() {
+  if (!hasYamlResult.value) return
+
+  try {
+    await navigator.clipboard.writeText(yamlResult.value)
+    ElMessage.success('YAML 已复制')
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('复制失败，请手动复制')
+  }
+}
+
+function formatYaml() {
+  if (!hasYamlResult.value) return
+
+  yamlResult.value = formatYamlText(yamlResult.value)
+  ElMessage.success('YAML 已格式化')
+}
+
 function exportYaml() {
-  if (!yamlResult.value.trim()) {
+  if (!hasYamlResult.value) {
     ElMessage.warning('暂无可导出的 YAML 内容')
     return
   }
@@ -155,7 +202,7 @@ function exportYaml() {
             <el-button class="hero-primary" type="primary" @click="goWorkspace">
               开始创作
             </el-button>
-            <el-button class="hero-secondary" @click="fillExampleAndOpen">
+            <el-button class="hero-secondary" @click="openDemoPreview">
               查看示例
             </el-button>
           </div>
@@ -262,6 +309,9 @@ function exportYaml() {
             </el-form-item>
 
             <div class="actions">
+              <el-button class="example-button" @click="fillExampleAndOpen">
+                填入示例
+              </el-button>
               <el-button class="clear-button" @click="clearText">
                 清空
               </el-button>
@@ -285,13 +335,29 @@ function exportYaml() {
               <p>生成后可以直接检查结构、继续编辑，或导出为 YAML 文件。</p>
             </div>
 
-            <el-button
-              class="export-button"
-              :disabled="!yamlResult.trim()"
-              @click="exportYaml"
-            >
-              导出 YAML
-            </el-button>
+            <div class="output-actions">
+              <el-button
+                class="copy-button"
+                :disabled="!hasYamlResult"
+                @click="copyYaml"
+              >
+                复制
+              </el-button>
+              <el-button
+                class="format-button"
+                :disabled="!hasYamlResult"
+                @click="formatYaml"
+              >
+                格式化
+              </el-button>
+              <el-button
+                class="export-button"
+                :disabled="!hasYamlResult"
+                @click="exportYaml"
+              >
+                导出 YAML
+              </el-button>
+            </div>
           </div>
 
           <el-alert
@@ -314,7 +380,10 @@ function exportYaml() {
           <div class="yaml-editor">
             <div class="editor-toolbar">
               <span>script.yaml</span>
-              <span>YAML</span>
+              <div class="editor-meta">
+                <span class="generation-status">{{ generationStatusText }}</span>
+                <span>YAML</span>
+              </div>
             </div>
             <el-input
               v-model="yamlResult"
@@ -326,5 +395,47 @@ function exportYaml() {
         </section>
       </main>
     </section>
+
+    <el-dialog
+      v-model="demoPreviewVisible"
+      class="demo-dialog"
+      align-center
+      append-to-body
+      width="920px"
+    >
+      <template #header>
+        <div class="demo-dialog-header">
+          <h2>示例预览</h2>
+          <p>查看小说输入和 YAML 剧本输出的对应关系。</p>
+        </div>
+      </template>
+
+      <div class="demo-preview-grid">
+        <article class="demo-preview-card">
+          <h3>示例小说片段</h3>
+          <div class="demo-text-preview">
+            <p v-for="paragraph in demoNovelParagraphs" :key="paragraph">
+              {{ paragraph }}
+            </p>
+          </div>
+        </article>
+
+        <article class="demo-preview-card code-card">
+          <h3>YAML 输出示例</h3>
+          <pre class="demo-yaml-preview"><code>{{ demoYamlPreview }}</code></pre>
+        </article>
+      </div>
+
+      <template #footer>
+        <div class="demo-dialog-footer">
+          <el-button @click="demoPreviewVisible = false">
+            关闭
+          </el-button>
+          <el-button type="primary" @click="useDemoFromPreview">
+            使用该示例开始创作
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
